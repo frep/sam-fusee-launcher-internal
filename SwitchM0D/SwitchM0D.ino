@@ -1,19 +1,22 @@
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//  INCLUDES
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #include <Arduino.h>
 #include <Usb.h>
-#include <Adafruit_DotStar.h>
-
-#define WAKEUP_PIN 4               // Solder to side of cap on guide
-                                   // -= NOTE: THIS MUST BE PIN 4!!! =-
-#define RCM_STRAP_PIN 3            // Solder to pin 10 on joycon rail
-#define RCM_STRAP_TIME_us 1000000  // Amount of time to hold RCM_STRAP low and then launch payload
-#define VOLUP_PIN 0
-#define ONBOARD_LED 13
-#define LED_CONFIRM_TIME_us 500000 // How long to show red or green light for success or fail
-
 // Contains fuseeBin and FUSEE_BIN_LENGTH
 // Include only one payload here
 // Use tools/binConverter.py to convert any payload bin you wish to load
-#include "hekate_ctcaer_3.0.h"
+#include "SXOS.h"
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//  DEFINES
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#define PIN_DO_Rx  0    // GPIO, if used for serial, this is the Rx line
+#define PIN_D1_Tx  1    // GPIO, if used for serial, this is the Tx line
+#define PIN_D3_RCM 3    // GPIO, used as RCM_Strap here
+#define PIN_D4_On  4    // Pin to keep the circuit on (directly connected to transistor)
+
+#define RCM_STRAP_TIME_us 1000000  // Amount of time to hold RCM_STRAP low and then launch payload
 
 #define INTERMEZZO_SIZE 92
 const byte intermezzo[INTERMEZZO_SIZE] =
@@ -28,6 +31,10 @@ const byte intermezzo[INTERMEZZO_SIZE] =
 
 #define PACKET_CHUNK_SIZE 0x1000
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//  DEBUG
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 #ifdef DEBUG
 #define DEBUG_PRINT(x)  Serial.print (x)
 #define DEBUG_PRINTLN(x)  Serial.println (x)
@@ -37,18 +44,6 @@ const byte intermezzo[INTERMEZZO_SIZE] =
 #define DEBUG_PRINTLN(x)
 #define DEBUG_PRINTHEX(x,y)
 #endif
-
-USBHost usb;
-EpInfo epInfo[3];
-
-byte usbWriteBuffer[PACKET_CHUNK_SIZE] = {0};
-uint32_t usbWriteBufferUsed = 0;
-uint32_t packetsWritten = 0;
-
-bool foundTegra = false;
-byte tegraDeviceAddress = -1;
-
-unsigned long lastCheckTime = 0;
 
 const char *hexChars = "0123456789ABCDEF";
 void serialPrintHex(const byte *data, byte length)
@@ -61,7 +56,22 @@ void serialPrintHex(const byte *data, byte length)
   DEBUG_PRINTLN();
 }
 
-Adafruit_DotStar strip = Adafruit_DotStar(1, INTERNAL_DS_DATA, INTERNAL_DS_CLK, DOTSTAR_BGR);
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//  GLOBAL Data
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+USBHost usb;
+EpInfo epInfo[3];
+byte usbWriteBuffer[PACKET_CHUNK_SIZE] = {0};
+uint32_t usbWriteBufferUsed = 0;
+uint32_t packetsWritten = 0;
+bool foundTegra = false;
+byte tegraDeviceAddress = -1;
+unsigned long lastCheckTime = 0;
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//  GLOBAL FUNCTIONS
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // From what I can tell, usb.outTransfer is completely broken for transfers larger than 64 bytes (even if maxPktSize is
 // adjusted for that endpoint). This is a minimal and simplified reimplementation specific to our use cases that fixes
@@ -93,7 +103,6 @@ void usbOutTransferChunk(uint32_t addr, uint32_t ep, uint32_t nbytes, uint8_t* d
     }
     else
     {
-      strip.setPixelColor(0, 64, 0, 0); strip.show();
       DEBUG_PRINTLN("Error in OUT transfer");
       return;
     }
@@ -202,111 +211,33 @@ void setupTegraDevice()
   UHD_Pipe_Alloc(tegraDeviceAddress, 0x01, USB_HOST_PTYPE_BULK, USB_EP_DIR_IN, 0x40, 0, USB_HOST_NB_BK_1);
 }
 
-void sleep(int errorCode) {
-  // Turn off all LEDs and go to sleep. To launch another payload, press the reset button on the device.
-  //delay(100);
-  digitalWrite(PIN_LED_RXL, HIGH);
-  digitalWrite(PIN_LED_TXL, HIGH);
-  digitalWrite(ONBOARD_LED, LOW);
-  if (errorCode == 1) {
-    setLedColor("green"); //led to red
-    delayMicroseconds(LED_CONFIRM_TIME_us);
-    setLedColor("black"); //led to off
-  } else {
-    setLedColor("red"); //led to red
-    delayMicroseconds(LED_CONFIRM_TIME_us);
-    setLedColor("black"); //led to off
-  }
-  
-  SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk; /* Enable deepsleep */
-
-  GCLK->CLKCTRL.reg = uint16_t(
-      GCLK_CLKCTRL_CLKEN |
-      GCLK_CLKCTRL_GEN_GCLK2 |
-      GCLK_CLKCTRL_ID( GCLK_CLKCTRL_ID_EIC_Val )
-  );
-  while (GCLK->STATUS.bit.SYNCBUSY) {}
-  
-  __DSB(); /* Ensure effect of last store takes effect */
-  __WFI(); /* Enter sleep mode */
-}
-
-void setLedColor(const char color[]) {
-  if (color == "red") {
-    strip.setPixelColor(0, 64, 0, 0);
-  } else if (color == "green") {
-    strip.setPixelColor(0, 0, 64, 0);
-  } else if (color == "orange") {
-    strip.setPixelColor(0, 64, 32, 0);
-  } else if (color == "blue") {
-    strip.setPixelColor(0, 0, 0, 64);
-  } else if (color == "black") {
-    strip.setPixelColor(0, 0, 0, 0);
-  } else {
-    strip.setPixelColor(0, 255, 255, 255);
-  }
-  strip.show();
-}
-
-void wakeup(){
-  // First, we set the RCM_STRAP low
-  pinMode(RCM_STRAP_PIN, OUTPUT);
-  pinMode(VOLUP_PIN, OUTPUT);
-  digitalWrite(RCM_STRAP_PIN, LOW);
-  digitalWrite(VOLUP_PIN, LOW);
-  setLedColor("blue");
-  // Wait a second (I tried to reduce this but 1 second is good)
-  delayMicroseconds(RCM_STRAP_TIME_us);
-  SCB->AIRCR = ((0x5FA << SCB_AIRCR_VECTKEY_Pos) | SCB_AIRCR_SYSRESETREQ_Msk); //full software reset
-}
-
-void setup()
-{
-  // This continues after the reset after a wakeup
-  // Set RCM_STRAP as an input to "stealth" any funny business on the RCM_STRAP
-  pinMode(RCM_STRAP_PIN, INPUT);
-  pinMode(VOLUP_PIN, INPUT);
-  pinMode(WAKEUP_PIN, INPUT);
-
-  // Before sleeping, make sure that we can wake up again when the switch turns on
-  // by attaching an interrupt to the wakeup pin
-  attachInterrupt(WAKEUP_PIN, wakeup, RISING);
-  // Allow pin 4 to trigger wakeups. I'm not sure how to generalize this so that's
-  // why pin 4 must be the wakeup pin.
-  EIC->WAKEUP.vec.WAKEUPEN |= (1<<6);
-
-  strip.begin();
-
+int injectPayload()
+{  
   int usbInitialized = usb.Init();
-#ifdef DEBUG
-  Serial.begin(115200);
-  delay(100);
-#endif
 
-  if (usbInitialized == -1) sleep(-1);
+  if (usbInitialized == -1)
+  {
+    DEBUG_PRINTLN("Error: Unable to initialize usb");
+    return -1;
+  }
 
   DEBUG_PRINTLN("Ready! Waiting for Tegra...");
-  bool blink = true;
   int currentTime = 0;
   while (!foundTegra)
   {
     currentTime = millis();
     usb.Task();
 
-    if (currentTime > lastCheckTime + 100) {
+    if (currentTime > lastCheckTime + 100) 
+    {
       usb.ForEachUsbDevice(&findTegraDevice);
-      if (blink && !foundTegra) {
-        setLedColor("orange"); //led to orange
-      } else {
-        setLedColor("black"); //led to black
-      }
-      blink = !blink;
       lastCheckTime = currentTime;
     }
-    if (currentTime > 1500) {
-      sleep(-1);
+    if (currentTime > 1500)
+    {
+      DEBUG_PRINTLN("Error: timeout: No Tegra found!");
+      return -1;
     }
-
   }
 
   DEBUG_PRINTLN("Found Tegra!");
@@ -333,12 +264,40 @@ void setup()
               0x00, 0x00, 0x00, 0x00, 0x7000, 0x7000, usbWriteBuffer, NULL);
   DEBUG_PRINTLN("Done!");
 
-  sleep(1);
+  return 0;
+}
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//  PROGRAM
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void setup()
+{
+  // Set the pins to power on in RCM mode
+  pinMode(PIN_D3_RCM, OUTPUT);
+  pinMode(PIN_D4_On, OUTPUT);
+
+  digitalWrite(PIN_D3_RCM, LOW);  // Set RCM_Strap low
+  digitalWrite(PIN_D4_On, HIGH);  // Set On-signal high, so m0 chip is powered
+
+  // Wait a second (I tried to reduce this but 1 second is good)
+  delayMicroseconds(RCM_STRAP_TIME_us);
+
+#ifdef DEBUG
+  Serial.begin(115200);
+  while(!Serial){}
+  Serial.println("init done");
+#endif
+
+  injectPayload();
+
+  // Set the pins to power off
+  digitalWrite(PIN_D4_On, LOW); // Set On-signal low, so m0 chip is not supplied anymore
+  pinMode(PIN_D3_RCM, INPUT);   // Don't tie RCM_strap down to ground any longer!
 
 }
 
 void loop()
 {
-  sleep(1);
+  // wait until supply drops so much, that m0 turns off
+  delay(1);
 }

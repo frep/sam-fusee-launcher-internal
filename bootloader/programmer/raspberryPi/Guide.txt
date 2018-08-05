@@ -1,0 +1,66 @@
+Copy to openocd.cfg and samd21_sam_ba.bin to your pi "/home/pi" folder
+***Both files need to be in the same folder***.
+
+Open putty/telnet client and log into the pi
+
+Type this commands (without quotes):
+
+"ls"
+
+You should see opencd.cfg & sam21.sam_ba.bin in the directory, if not type this (without quotes):
+
+"cd ~"
+"cd /home/pi"
+
+If you don't see the files now, you never put them in the correct folder.
+
+Next type (without quotes):
+
+"sudo openocd"
+
+You should get some info in your telnet/putty screen showing you this:
+
+adapter speed: 400 kHz
+cortex_m reset_config sysresetreq
+none separate
+BCM2835 GPIO nums: swclk = 25, swdio = 24
+BCM2835 GPIO config: srst = 18
+adapter_nsrst_delay: 100
+adapter_nsrst_assert_width: 100
+Info : BCM2835 GPIO JTAG/SWD bitbang driver
+Info : SWD only mode enabled (specify tck, tms, tdi and tdo gpios to add JTAG mode)
+Info : clock speed 400 kHz
+Info : SWD DPIDR 0x00736cb8
+
+Press ctrl+c to exit from the program
+
+Now go and edit opencd.cfg
+
+Change this:
+#at91samd bootloader 0
+
+#program samd21_sam_ba.bin verify
+
+#at91samd bootloader 8192
+
+#reset
+
+#shutdown
+
+To this:
+at91samd bootloader 0
+
+program samd21_sam_ba.bin verify
+
+at91samd bootloader 8192
+
+reset
+
+shutdown
+
+
+Now we should be able to program the chip, Enter the command (without quotes)
+
+"sudo openocd"
+
+If everything went correctly - that should be the bootloader programmed.
