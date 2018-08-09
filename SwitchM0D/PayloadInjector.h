@@ -3,6 +3,8 @@
 
 #include <Usb.h>
 
+#define PACKET_CHUNK_SIZE 0x1000
+
 #define INTERMEZZO_SIZE 92
 const byte intermezzo[INTERMEZZO_SIZE] =
 {
@@ -14,12 +16,10 @@ const byte intermezzo[INTERMEZZO_SIZE] =
   0x5C, 0xF0, 0x01, 0x40, 0x00, 0x00, 0x02, 0x40, 0x00, 0x00, 0x01, 0x40,
 };
 
-#define PACKET_CHUNK_SIZE 0x1000
-
 class PayloadInjector {
  public:
-	PayloadInjector(const byte *payload, uint32_t payloadLength);
-	~PayloadInjector();
+  PayloadInjector(const byte *payload, uint32_t payloadLength);
+  ~PayloadInjector();
   int injectPayload();
   static USBHost usb;
   static bool foundTegra;
@@ -34,12 +34,12 @@ class PayloadInjector {
   void sendPayload(const byte *payload, uint32_t payloadLength);
   static void findTegraDevice(UsbDeviceDefinition *pdev);
   void setupTegraDevice();
-	EpInfo epInfo[3];
-	byte usbWriteBuffer[PACKET_CHUNK_SIZE];
-	uint32_t usbWriteBufferUsed;
-	uint32_t packetsWritten;
-	unsigned long lastCheckTime;
-	const byte *m_payload; 
-	uint32_t m_payloadLength;
+  EpInfo epInfo[3];
+  byte usbWriteBuffer[PACKET_CHUNK_SIZE];
+  uint32_t usbWriteBufferUsed;
+  uint32_t packetsWritten;
+  unsigned long lastCheckTime;
+  const byte *m_payload; 
+  uint32_t m_payloadLength;
 };
 #endif // _PAYLOADINJECTOR_H_
