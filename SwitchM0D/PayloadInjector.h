@@ -18,9 +18,9 @@ const byte intermezzo[INTERMEZZO_SIZE] =
 
 class PayloadInjector {
  public:
-  PayloadInjector(const byte *payload, uint32_t payloadLength);
+  PayloadInjector();
   ~PayloadInjector();
-  int injectPayload();
+  int injectPayload(const byte *payload, uint32_t payloadLength);
   static USBHost usb;
   static bool foundTegra;
   static byte tegraDeviceAddress;
@@ -39,7 +39,5 @@ class PayloadInjector {
   uint32_t usbWriteBufferUsed;
   uint32_t packetsWritten;
   unsigned long lastCheckTime;
-  const byte *m_payload; 
-  uint32_t m_payloadLength;
 };
 #endif // _PAYLOADINJECTOR_H_

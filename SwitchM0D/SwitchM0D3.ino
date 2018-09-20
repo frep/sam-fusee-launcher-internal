@@ -1,38 +1,46 @@
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //  INCLUDES
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-#include <Arduino.h>
+#include "Arduino.h"
 #include "PayloadInjector.h"
-// Contains fuseeBin and FUSEE_BIN_LENGTH
-// Include only one payload here
-// Use tools/binConverter.py to convert any payload bin you wish to load
-#include "SXOS.h"
+#include "Led.h"
+#include "Button.h"
+#include "SXOS.h"   // Payload
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //  DEFINES
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-#define PIN_D0_Rx  0    // GPIO, if used for serial, this is the Rx line
-#define PIN_D1_Tx  1    // GPIO, if used for serial, this is the Tx line
-#define PIN_D3     3    // GPIO
-#define PIN_D4_On  4    // Pin to keep the circuit on (directly connected to transistor)
+#define PIN_D0_Rx      0     // GPIO, if used for serial, this is the Rx line
+#define PIN_D1_Tx      1     // GPIO, if used for serial, this is the Tx line
+#define PIN_D3         3     // GPIO
+#define PIN_D4_On      4     // Pin to keep the circuit on (directly connected to transistor)
+#define PIN_D13_LED   13     // LED pin
+
+#define activeLow     true
+#define activeHigh    false
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //  PROGRAM
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-PayloadInjector injector(fuseeBin, FUSEE_BIN_SIZE);
+PayloadInjector injector;
+Led led(PIN_D13_LED, activeHigh);
 
 void setup()
 {
-  // Set the pins to power on in RCM mode
+  // Set On-signal high, so m0 chip stays powered
   pinMode(PIN_D4_On, OUTPUT);
-
-  digitalWrite(PIN_D4_On, HIGH);  // Set On-signal high, so m0 chip is powered
-
-  injector.injectPayload();
-
-  // Set the pins to power off
-  digitalWrite(PIN_D4_On, LOW); // Set On-signal low, so m0 chip is not supplied anymore
+  digitalWrite(PIN_D4_On, HIGH);
+  
+  // Initialize the led and set it on!
+  led.init();
+  led.setOn();
+  
+  // inject selected payload!
+  injector.injectPayload(fuseeBin, FUSEE_BIN_SIZE);
+  
+  // Set On-signal low, so m0 is not supplied anymore
+  digitalWrite(PIN_D4_On, LOW);
 }
 
 void loop()

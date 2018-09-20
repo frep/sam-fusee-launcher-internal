@@ -5,10 +5,8 @@ USBHost PayloadInjector::usb;
 bool PayloadInjector::foundTegra = false;
 byte PayloadInjector::tegraDeviceAddress = -1;
 
-PayloadInjector::PayloadInjector(const byte *payload, uint32_t payloadLength)
+PayloadInjector::PayloadInjector()
 {
-  m_payload = payload;
-  m_payloadLength = payloadLength;
   usbWriteBuffer[PACKET_CHUNK_SIZE] = {0};
   usbWriteBufferUsed = 0;
   packetsWritten = 0;
@@ -19,7 +17,7 @@ PayloadInjector::~PayloadInjector()
 {
 }
 
-int PayloadInjector::injectPayload()
+int PayloadInjector::injectPayload(const byte *payload, uint32_t payloadLength)
 {
   int usbInitialized = usb.Init();
 
@@ -57,7 +55,7 @@ int PayloadInjector::injectPayload()
   // sending payload
   UHD_Pipe_Alloc(tegraDeviceAddress, 0x01, USB_HOST_PTYPE_BULK, USB_EP_DIR_OUT, 0x40, 0, USB_HOST_NB_BK_1);
   packetsWritten = 0;
-  sendPayload(m_payload, m_payloadLength);
+  sendPayload(payload, payloadLength);
 
   if (packetsWritten % 2 != 1)
   {
